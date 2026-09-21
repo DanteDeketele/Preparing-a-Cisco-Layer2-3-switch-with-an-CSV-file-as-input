@@ -1,0 +1,20 @@
+! VLAN Configuration Commands
+hostname Switch
+vlan 1982
+name CD-WIFI
+
+vlan 1969
+name CD-IP-CAM
+
+vlan 1970
+name CD-Signage
+
+vlan 1978
+name CD-Lockers
+
+vlan 1968
+name CD-Printers
+
+vlan 1973
+name CD-ClientsD0-1-2
+

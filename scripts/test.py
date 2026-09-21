@@ -15,6 +15,12 @@ def get_parameters():
         elif opt in ("-o", "--output"): 
             global output_file
             output_file = arg
+        elif opt in ("-h", "--help"):
+            print("Usage: python test.py -f <input_file> -o <output_file>")
+            sys.exit(0)
+        elif opt in ("-hn", "--hostname"):
+            global hostname
+            hostname = arg
 
     if 'filename' not in globals() or 'output_file' not in globals():
         print("Error: Both input file and output file must be specified. Use -f <input_file> and -o <output_file>.")
@@ -95,6 +101,15 @@ class ConfigLine:
         
         return True, "Valid configuration line"
 
+def get_vlan_creation_commands(config_line):
+    commands = []
+    commands.append(f"vlan {config_line.vlan_id}")
+    commands.append(f"name {config_line.vlan_name}")
+    if config_line.ip_address and config_line.subnet_mask:
+        commands.append(f"interface vlan {config_line.vlan_id}")
+        commands.append(f"ip address {config_line.ip_address} {config_line.subnet_mask}")
+        commands.append("no shutdown")
+    return commands
 
 def main():
     get_parameters()
@@ -102,6 +117,15 @@ def main():
     check_output_file(output_file)
 
     config_lines = []
+    result = []
+
+    result.append("! VLAN Configuration Commands")
+    if 'hostname' in globals():
+        result.append(f"hostname {hostname}")
+    else:
+        result.append("hostname Switch")
+
+    result.append("")  # Add a blank line after the hostname
 
     # Read the input file and process each line
     with open(filename, "r") as f:
@@ -134,5 +158,14 @@ def main():
 
     for config in config_lines:
         print(f"VLAN ID: {config.vlan_id}, VLAN Name: {config.vlan_name}, IP Address: {config.ip_address}, Subnet Mask: {config.subnet_mask}, Switch: {config.switch}, Ports: {config.port_list}, port_ranges: {config.port_ranges}")
+        commands = get_vlan_creation_commands(config)
+        for cmd in commands:
+            result.append(cmd)
+        result.append("")  # Add a blank line between VLAN configurations
+
+    # Write the result to the output file
+    with open(output_file, "w") as f:
+        for cmd in result:
+            f.write(f"{cmd}\n")
 
 main()
