@@ -2,9 +2,9 @@ from netmiko import ConnectHandler
 
 cisco = {
     'device_type': 'cisco_ios',
-    'host':   '10.10.10.10',
-    'username': 'test',
-    'password': 'password'
+    'host':   '192.168.99.10',
+    'username': 'cisco',
+    'password': 'cisco'
 }
 
 net_connect = ConnectHandler(**cisco)
