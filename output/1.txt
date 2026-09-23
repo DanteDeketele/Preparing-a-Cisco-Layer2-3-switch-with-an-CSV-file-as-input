@@ -1,20 +1,94 @@
 ! VLAN Configuration Commands
 hostname Switch
+
 vlan 1982
 name CD-WIFI
+interface vlan 1982
+no ip address
+no shutdown
+exit
+
+interface range Gi0/1-12
+	switchport access vlan 1982
+	switchport mode access
+	spanning-tree portfast
+	no shutdown
+	exit
 
 vlan 1969
 name CD-IP-CAM
+interface vlan 1969
+no ip address
+no shutdown
+exit
+
+interface Gi0/13
+	switchport access vlan 1969
+	switchport mode access
+	spanning-tree portfast
+	no shutdown
+	exit
 
 vlan 1970
 name CD-Signage
+interface vlan 1970
+no ip address
+no shutdown
+exit
+
+interface Gi0/14
+	switchport access vlan 1970
+	switchport mode access
+	spanning-tree portfast
+	no shutdown
+	exit
 
 vlan 1978
 name CD-Lockers
+interface vlan 1978
+no ip address
+no shutdown
+exit
+
+interface range Gi0/15-16
+	switchport access vlan 1978
+	switchport mode access
+	spanning-tree portfast
+	no shutdown
+	exit
 
 vlan 1968
 name CD-Printers
+interface vlan 1968
+no ip address
+no shutdown
+exit
+
+interface range Gi0/17-18
+	switchport access vlan 1968
+	switchport mode access
+	spanning-tree portfast
+	no shutdown
+	exit
 
 vlan 1973
 name CD-ClientsD0-1-2
+interface vlan 1973
+no ip address
+no shutdown
+exit
+
+interface range Gi0/19-22
+	switchport access vlan 1973
+	switchport mode access
+	spanning-tree portfast
+	no shutdown
+	exit
+
+vlan 1967
+name CD-Management
+interface vlan 1967
+ip address 172.19.67.13 255.255.255.0
+no shutdown
+exit
 
