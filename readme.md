@@ -11,3 +11,9 @@ python .\scripts\send_config.py -f .\input\example-L2.csv --host 192.168.99.10 -
 
 # convert and send after typing SEND at the safety prompt
 python .\scripts\send_config.py -f .\input\example-L2.csv --host 192.168.99.10 -u cisco
+
+# automatic confirmations (use with care)
+python .\scripts\send_config.py -f .\input\example-L2.csv --host 192.168.99.10 -u cisco -y
+
+# provide the SSH password on the command line instead of being prompted
+python .\scripts\send_config.py -f .\input\example-L2.csv --host 192.168.99.10 -u cisco -pw "your-password"
