@@ -12,6 +12,10 @@ from pathlib import Path
 from netmiko import ConnectHandler
 
 
+# -----------------------------------------------------------------------------
+# Constants
+# -----------------------------------------------------------------------------
+
 SCRIPT_DIR = Path(__file__).resolve().parent
 CONVERTER = SCRIPT_DIR / "test.py"
 
@@ -21,8 +25,11 @@ COLOR_GREEN = "\033[92m"
 COLOR_BOLD = "\033[1m"
 COLOR_RESET = "\033[0m"
 COMMAND_TIMEOUT = 10
-LAST_READ_WAIT = 0.3
 
+
+# -----------------------------------------------------------------------------
+# Command-line arguments
+# -----------------------------------------------------------------------------
 
 def parse_arguments():
     parser = argparse.ArgumentParser(
@@ -53,6 +60,10 @@ def parse_arguments():
     )
     return parser.parse_args()
 
+
+# -----------------------------------------------------------------------------
+# Input validation and safety warnings
+# -----------------------------------------------------------------------------
 
 def contains_port_24(value):
     for part in value.split(","):
@@ -112,35 +123,47 @@ def find_warnings(input_path, host):
     return warnings
 
 
+# -----------------------------------------------------------------------------
+# Configuration conversion and temporary-file handling
+# -----------------------------------------------------------------------------
+
 def convert_with_test(input_path, porttype, hostname):
-    with tempfile.TemporaryDirectory() as temporary_directory:
-        output_path = Path(temporary_directory) / "converted.txt"
-        command = [
-            sys.executable,
-            str(CONVERTER),
-            "--file",
-            str(input_path),
-            "--output",
-            str(output_path),
-            "--porttype",
-            porttype,
-            "--hostname",
-            hostname,
-        ]
-        result = subprocess.run(command, capture_output=True, text=True)
-        if result.returncode != 0:
-            raise RuntimeError(result.stderr.strip() or result.stdout.strip())
-        if result.stdout:
-            print(result.stdout, end="")
-        return [
-            line
-            for line in output_path.read_text(encoding="utf-8").splitlines()
-            if line.strip() and not line.lstrip().startswith("!")
-        ]
+    temporary_file = tempfile.NamedTemporaryFile(
+        prefix="switch-config-", suffix=".txt", delete=False
+    )
+    output_path = Path(temporary_file.name)
+    temporary_file.close()
+# -----------------------------------------------------------------------------
+# User-facing output and confirmation
+# -----------------------------------------------------------------------------
+
+    command = [
+        sys.executable,
+        str(CONVERTER),
+        "--file",
+        str(input_path),
+        "--output",
+        str(output_path),
+        "--porttype",
+        porttype,
+        "--hostname",
+        hostname,
+    ]
+    result = subprocess.run(command, capture_output=True, text=True)
+    if result.returncode != 0:
+        output_path.unlink(missing_ok=True)
+        raise RuntimeError(result.stderr.strip() or result.stdout.strip())
+    if result.stdout:
+        print(result.stdout, end="")
+    return [
+        line
+        for line in output_path.read_text(encoding="utf-8").splitlines()
+        if line.strip() and not line.lstrip().startswith("!")
+    ], output_path
 
 
 def print_warnings(warnings, commands):
-    print(f"\n{COLOR_RED}{COLOR_BOLD}WARNING{COLOR_RESET}")
+    print(f"{COLOR_RED}{COLOR_BOLD}WARNING{COLOR_RESET}")
     for warning in warnings:
         highlighted = re.sub(
             r"(management|SSH|port 24|uplink|interface)",
@@ -149,7 +172,7 @@ def print_warnings(warnings, commands):
             flags=re.IGNORECASE,
         )
         print(f"{COLOR_YELLOW}- {highlighted}{COLOR_RESET}")
-    print(f"\n{len(commands)} commands are ready to send.")
+    print(f"{len(commands)} commands are ready to send.")
 
 
 def confirm_send(warnings, commands):
@@ -166,6 +189,10 @@ def confirm_send(warnings, commands):
         return answer in {"y", "yes"}
     return True
 
+
+# -----------------------------------------------------------------------------
+# Device response and progress handling
+# -----------------------------------------------------------------------------
 
 def get_hostname(prompt):
     return prompt.strip().rstrip("#>").strip()
@@ -203,13 +230,12 @@ def clear_progress():
     sys.stdout.flush()
 
 
+# -----------------------------------------------------------------------------
+# Verification and configuration delivery
+# -----------------------------------------------------------------------------
+
 def get_verification_commands(commands):
-    verification_commands = ["show vlan brief"]
-    for command in commands:
-        match = re.fullmatch(r"interface vlan (\d+)", command, re.IGNORECASE)
-        if match:
-            verification_commands.append(f"show running-config interface Vlan{match.group(1)}")
-    return verification_commands
+    return ["show vlan brief"]
 
 
 def verify_configuration(net_connect, commands):
@@ -224,18 +250,22 @@ def send_configuration(net_connect, commands, hostname_change):
     device_errors = []
     successful_commands = []
     commands_to_send = [command.strip() for command in commands if command.strip()]
-    configure_response = net_connect.send_command_timing(
-        "configure terminal", read_timeout=COMMAND_TIMEOUT, last_read=LAST_READ_WAIT
+    configure_response = net_connect.send_command(
+        "configure terminal",
+        expect_string=r"[>#]\s*$",
+        read_timeout=COMMAND_TIMEOUT,
+        strip_prompt=False,
+        strip_command=False,
     )
     device_errors.extend(find_device_errors(configure_response))
     for command_number, command in enumerate(commands_to_send, start=1):
         prompt = net_connect.find_prompt()
         print_progress(command_number, len(commands_to_send), f"{prompt} {command}")
         try:
-            response = net_connect.send_command_timing(
+            response = net_connect.send_command(
                 command,
+                expect_string=r"[>#]\s*$",
                 read_timeout=COMMAND_TIMEOUT,
-                last_read=LAST_READ_WAIT,
                 strip_prompt=False,
                 strip_command=False,
             )
@@ -256,12 +286,20 @@ def send_configuration(net_connect, commands, hostname_change):
             ) from error
     if not hostname_change:
         responses.append(
-            net_connect.send_command_timing(
-                "end", read_timeout=COMMAND_TIMEOUT, last_read=LAST_READ_WAIT
+            net_connect.send_command(
+                "end",
+                expect_string=r"[>#]\s*$",
+                read_timeout=COMMAND_TIMEOUT,
+                strip_prompt=False,
+                strip_command=False,
             )
         )
     return responses, device_errors, successful_commands
 
+
+# -----------------------------------------------------------------------------
+# Main workflow
+# -----------------------------------------------------------------------------
 
 def main():
     arguments = parse_arguments()
@@ -272,13 +310,15 @@ def main():
         raise SystemExit(f"Converter not found: {CONVERTER}")
 
     warnings = find_warnings(input_path, arguments.host)
-    commands = convert_with_test(input_path, arguments.porttype, arguments.hostname)
+    commands, temporary_config_path = convert_with_test(
+        input_path, arguments.porttype, arguments.hostname
+    )
     commands = [command for command in commands if not command.startswith("hostname ")]
     print(f"[ok] Converted CSV into {len(commands)} configuration commands.")
-    print("[ok] Configuration stored in a temporary file.")
+    print(f"[ok] Configuration stored in temporary file: {temporary_config_path}")
     if arguments.dry_run:
         print_warnings(warnings, commands)
-        print("\nDry run complete. Nothing was sent.")
+        print("Dry run complete. Nothing was sent.")
         return
 
     if not arguments.yes and not confirm_send(warnings, commands):
@@ -338,7 +378,13 @@ def main():
             else:
                 print("[ok] Configuration commands sent.")
             if hostname_change:
-                print(net_connect.send_command_timing("end", read_timeout=COMMAND_TIMEOUT))
+                print(
+                    net_connect.send_command(
+                        "end",
+                        expect_string=r"[>#]\s*$",
+                        read_timeout=COMMAND_TIMEOUT,
+                    )
+                )
             verify_configuration(net_connect, successful_commands)
         except OSError as error:
             print(f"WARNING: The SSH channel closed while sending configuration: {error}")
