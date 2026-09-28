@@ -10,13 +10,14 @@ COMMAND_NO_SHUTDOWN = "no shutdown"
 COMMAND_INTERFACE_VLAN = "interface vlan"
 COMMAND_IP_ADDRESS = "ip address"
 COMMAND_NO_IP_ADDRESS = "no ip address"
+EXTENDED_VLAN_MIN = 1006
 
 def get_parameters():
     parser = argparse.ArgumentParser(description="Convert a Cisco VLAN CSV file to configuration text.")
     parser.add_argument("-f", "--file", required=True, help="Input CSV file")
     parser.add_argument("-o", "--output", required=True, help="Output text file")
     parser.add_argument("-hn", "--hostname", default="Switch", help="Switch hostname")
-    parser.add_argument("-pt", "--porttype", default="Gi0", help="Interface prefix")
+    parser.add_argument("-pt", "--porttype", default="Fa0", help="Interface prefix")
     return parser.parse_args()
 
 class ConfigLine:
@@ -104,6 +105,13 @@ def get_vlan_creation_commands(config_line):
         commands.append("exit")
     return commands
 
+def has_extended_vlan(config_lines):
+    return any(
+        not config_line.is_default_gateway
+        and int(config_line.vlan_id) >= EXTENDED_VLAN_MIN
+        for config_line in config_lines
+    )
+
 def get_port_configuration_commands(config_line):
     commands = []
     for port in config_line.port_list:
@@ -115,7 +123,9 @@ def get_port_configuration_commands(config_line):
         commands.append(f"\texit")
     for port_range in config_line.port_ranges:
         start_port, end_port = port_range.split("-")
-        commands.append(f"interface range {config_line.porttype}/{start_port}-{end_port}")
+        commands.append(
+            f"interface range {config_line.porttype}/{start_port} - {end_port}"
+        )
         commands.append(f"\t{COMMAND_SWITCHPORT_ACCESS_VLAN} {config_line.vlan_id}")
         commands.append(f"\t{COMMAND_SWITCHPORT_MODE_ACCESS}")
         commands.append(f"\t{COMMAND_SPANNING_TREE_PORTFAST}")
@@ -156,6 +166,10 @@ def main():
                 continue
             config_lines.append(config_line)
 
+
+    if has_extended_vlan(config_lines):
+        result.append("vtp mode transparent")
+        result.append("")
 
     for config in config_lines:
         if config.is_default_gateway:

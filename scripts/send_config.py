@@ -17,6 +17,7 @@ CONVERTER = SCRIPT_DIR / "test.py"
 
 COLOR_RED = "\033[91m"
 COLOR_YELLOW = "\033[93m"
+COLOR_GREEN = "\033[92m"
 COLOR_BOLD = "\033[1m"
 COLOR_RESET = "\033[0m"
 
@@ -29,7 +30,7 @@ def parse_arguments():
     parser.add_argument("--host", required=True, help="Switch management IP or hostname")
     parser.add_argument("-u", "--username", required=True, help="SSH username")
     parser.add_argument("--port", type=int, default=22, help="SSH port (default: 22)")
-    parser.add_argument("-pt", "--porttype", default="Gi0", help="Interface prefix")
+    parser.add_argument("-pt", "--porttype", default="Fa0", help="Interface prefix")
     parser.add_argument("-hn", "--hostname", default="Switch", help="Cisco hostname")
     parser.add_argument(
         "-pw",
@@ -170,11 +171,11 @@ def get_hostname(prompt):
 
 def find_device_errors(response):
     error_patterns = (
-        r"^%",
+        r"^%\s*(?:invalid|incomplete|ambiguous|error|failed|cannot)\b",
         r"invalid input",
         r"incomplete command",
         r"ambiguous command",
-        r"error",
+        r"\berror\b",
     )
     return [
         line.strip()
@@ -184,10 +185,12 @@ def find_device_errors(response):
 
 
 def print_progress(current, total, note):
-    width = 24
+    width = 12
     completed = int(width * current / total) if total else width
     bar = "#" * completed + "." * (width - completed)
-    sys.stdout.write(f"\r[{bar}] {current}/{total} {note[:55]:<55}")
+    sys.stdout.write(
+        f"\r{COLOR_GREEN}[{bar}]{COLOR_RESET} {current}/{total} {note[:45]:<45}"
+    )
     sys.stdout.flush()
     if current >= total:
         print()
@@ -209,16 +212,15 @@ def get_verification_commands(commands):
 
 def verify_configuration(net_connect, commands):
     print("\nVerification output:")
-    show_commands = get_verification_commands(commands)
-    for command_number, show_command in enumerate(show_commands, start=1):
-        print_progress(command_number, len(show_commands), f"Running {show_command}")
-        print(f"\n--- {show_command} ---")
+    for show_command in get_verification_commands(commands):
+        print(f"\n--- Checking {show_command} ---")
         print(net_connect.send_command(show_command, read_timeout=30))
 
 
 def send_configuration(net_connect, commands, hostname_change):
     responses = []
     device_errors = []
+    successful_commands = []
     commands_to_send = [command.strip() for command in commands if command.strip()]
     configure_response = net_connect.send_command_timing(
         "configure terminal", read_timeout=30, last_read=0.5
@@ -245,13 +247,14 @@ def send_configuration(net_connect, commands, hostname_change):
                     f"{' | '.join(command_errors)}{COLOR_RESET}"
                 )
                 break
+            successful_commands.append(command)
         except OSError as error:
             raise OSError(
                 f"SSH channel closed on command {command_number} at {prompt}: {command}"
             ) from error
     if not hostname_change:
         responses.append(net_connect.send_command_timing("end", read_timeout=30, last_read=0.5))
-    return responses, device_errors
+    return responses, device_errors, successful_commands
 
 
 def main():
@@ -320,7 +323,9 @@ def main():
                 print("Hostname unchanged. Continuing with the VLAN configuration.")
 
         try:
-            _, device_errors = send_configuration(net_connect, commands, hostname_change)
+            _, device_errors, successful_commands = send_configuration(
+                net_connect, commands, hostname_change
+            )
             if device_errors:
                 print(
                     f"{COLOR_RED}{COLOR_BOLD}WARNING: Sending stopped after "
@@ -330,13 +335,16 @@ def main():
                 print("[ok] Configuration commands sent.")
             if hostname_change:
                 print(net_connect.send_command_timing("end", read_timeout=30))
-            verify_configuration(net_connect, commands)
+            verify_configuration(net_connect, successful_commands)
         except OSError as error:
             print(f"WARNING: The SSH channel closed while sending configuration: {error}")
             print("Some commands may have been applied, but verification could not run.")
             print("Do not retry blindly; check the switch first.")
             return
-        print("Configuration sent. Review the switch response before disconnecting.")
+        if device_errors:
+            print("Configuration stopped. Review the switch response before disconnecting.")
+        else:
+            print(f"{COLOR_GREEN}{COLOR_BOLD}FINISHED{COLOR_RESET}")
 
 
 if __name__ == "__main__":

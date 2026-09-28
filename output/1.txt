@@ -1,5 +1,7 @@
 ! VLAN Configuration Commands
-hostname Switch
+hostname DanteSwitch
+
+vtp mode transparent
 
 vlan 1982
 name CD-WIFI
