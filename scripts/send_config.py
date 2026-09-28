@@ -20,6 +20,8 @@ COLOR_YELLOW = "\033[93m"
 COLOR_GREEN = "\033[92m"
 COLOR_BOLD = "\033[1m"
 COLOR_RESET = "\033[0m"
+COMMAND_TIMEOUT = 10
+LAST_READ_WAIT = 0.3
 
 
 def parse_arguments():
@@ -214,7 +216,7 @@ def verify_configuration(net_connect, commands):
     print("\nVerification output:")
     for show_command in get_verification_commands(commands):
         print(f"\n--- Checking {show_command} ---")
-        print(net_connect.send_command(show_command, read_timeout=30))
+        print(net_connect.send_command(show_command, read_timeout=COMMAND_TIMEOUT))
 
 
 def send_configuration(net_connect, commands, hostname_change):
@@ -223,7 +225,7 @@ def send_configuration(net_connect, commands, hostname_change):
     successful_commands = []
     commands_to_send = [command.strip() for command in commands if command.strip()]
     configure_response = net_connect.send_command_timing(
-        "configure terminal", read_timeout=30, last_read=0.5
+        "configure terminal", read_timeout=COMMAND_TIMEOUT, last_read=LAST_READ_WAIT
     )
     device_errors.extend(find_device_errors(configure_response))
     for command_number, command in enumerate(commands_to_send, start=1):
@@ -232,8 +234,8 @@ def send_configuration(net_connect, commands, hostname_change):
         try:
             response = net_connect.send_command_timing(
                 command,
-                read_timeout=30,
-                last_read=0.5,
+                read_timeout=COMMAND_TIMEOUT,
+                last_read=LAST_READ_WAIT,
                 strip_prompt=False,
                 strip_command=False,
             )
@@ -253,7 +255,11 @@ def send_configuration(net_connect, commands, hostname_change):
                 f"SSH channel closed on command {command_number} at {prompt}: {command}"
             ) from error
     if not hostname_change:
-        responses.append(net_connect.send_command_timing("end", read_timeout=30, last_read=0.5))
+        responses.append(
+            net_connect.send_command_timing(
+                "end", read_timeout=COMMAND_TIMEOUT, last_read=LAST_READ_WAIT
+            )
+        )
     return responses, device_errors, successful_commands
 
 
@@ -291,7 +297,7 @@ def main():
         "keepalive": 30,
         "fast_cli": False,
         "global_delay_factor": 1,
-        "read_timeout_override": 60,
+        "read_timeout_override": COMMAND_TIMEOUT,
     }
 
     print(f"Connecting to {arguments.host}:{arguments.port}...")
@@ -301,7 +307,7 @@ def main():
         print(f"[ok] Connected to switch hostname: {actual_hostname}")
 
         try:
-            net_connect.send_command("show clock", read_timeout=20)
+            net_connect.send_command("show clock", read_timeout=COMMAND_TIMEOUT)
             print("[ok] SSH channel preflight passed.")
         except OSError as error:
             print(f"WARNING: The SSH channel closed before configuration was sent: {error}")
@@ -334,7 +340,7 @@ def main():
             else:
                 print("[ok] Configuration commands sent.")
             if hostname_change:
-                print(net_connect.send_command_timing("end", read_timeout=30))
+                print(net_connect.send_command_timing("end", read_timeout=COMMAND_TIMEOUT))
             verify_configuration(net_connect, successful_commands)
         except OSError as error:
             print(f"WARNING: The SSH channel closed while sending configuration: {error}")
