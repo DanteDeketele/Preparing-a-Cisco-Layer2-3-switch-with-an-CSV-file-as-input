@@ -17,7 +17,7 @@ from netmiko import ConnectHandler
 # -----------------------------------------------------------------------------
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-CONVERTER = SCRIPT_DIR / "test.py"
+CONVERTER = SCRIPT_DIR / "vlan_config_converter.py"
 
 COLOR_RED = "\033[91m"
 COLOR_YELLOW = "\033[93m"
@@ -33,7 +33,7 @@ COMMAND_TIMEOUT = 10
 
 def parse_arguments():
     parser = argparse.ArgumentParser(
-        description="Convert a CSV file with test.py and send the configuration to a Cisco switch."
+        description="Convert a CSV file and send the configuration to a Cisco switch."
     )
     parser.add_argument("-f", "--file", required=True, help="Input CSV file")
     parser.add_argument("--host", required=True, help="Switch management IP or hostname")
@@ -127,7 +127,7 @@ def find_warnings(input_path, host):
 # Configuration conversion and temporary-file handling
 # -----------------------------------------------------------------------------
 
-def convert_with_test(input_path, porttype, hostname):
+def convert_csv_to_config(input_path, porttype, hostname):
     temporary_file = tempfile.NamedTemporaryFile(
         prefix="switch-config-", suffix=".txt", delete=False
     )
@@ -310,7 +310,7 @@ def main():
         raise SystemExit(f"Converter not found: {CONVERTER}")
 
     warnings = find_warnings(input_path, arguments.host)
-    commands, temporary_config_path = convert_with_test(
+    commands, temporary_config_path = convert_csv_to_config(
         input_path, arguments.porttype, arguments.hostname
     )
     commands = [command for command in commands if not command.startswith("hostname ")]
