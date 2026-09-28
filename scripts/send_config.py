@@ -275,9 +275,7 @@ def main():
     commands = convert_with_test(input_path, arguments.porttype, arguments.hostname)
     commands = [command for command in commands if not command.startswith("hostname ")]
     print(f"[ok] Converted CSV into {len(commands)} configuration commands.")
-
-    print("\nGenerated configuration:")
-    print("\n".join(commands))
+    print("[ok] Configuration stored in a temporary file.")
     if arguments.dry_run:
         print_warnings(warnings, commands)
         print("\nDry run complete. Nothing was sent.")
