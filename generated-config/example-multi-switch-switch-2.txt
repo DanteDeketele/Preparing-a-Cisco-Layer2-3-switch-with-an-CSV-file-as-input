@@ -3,6 +3,8 @@ hostname Switch
 
 ip routing
 
+ip default-gateway 192.168.99.1
+
 vlan 20
 name Users-on-Switch-2
 interface vlan 20

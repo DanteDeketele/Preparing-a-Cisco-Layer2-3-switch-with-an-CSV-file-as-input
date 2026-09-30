@@ -49,7 +49,10 @@ class ConfigLine:
             ))
         )
         self.is_management = bool(
-            self.ip_address and self.subnet_mask and not self.switch and not self.ports
+            self.ip_address
+            and self.subnet_mask
+            and not self.ports
+            and "management" in self.vlan_name.lower()
         )
         self.is_default_gateway = bool(
             self.ip_address
@@ -181,6 +184,37 @@ def has_layer3_vlans(config_lines):
         for config_line in config_lines
     )
 
+def get_default_gateway(config_lines):
+    explicit_gateway = next(
+        (
+            config_line.ip_address
+            for config_line in config_lines
+            if config_line.is_default_gateway
+        ),
+        None,
+    )
+    if explicit_gateway:
+        return explicit_gateway
+
+    management_line = next(
+        (
+            config_line
+            for config_line in config_lines
+            if config_line.is_management
+        ),
+        None,
+    )
+    if not management_line:
+        return None
+
+    network = ipaddress.IPv4Network(
+        f"{management_line.ip_address}/{management_line.subnet_mask}",
+        strict=False,
+    )
+    if network.num_addresses <= 2:
+        return None
+    return str(network.network_address + 1)
+
 def get_port_configuration_commands(config_line):
     commands = []
     vlan_list = config_line.vlan_id.replace(" ", "")
@@ -289,10 +323,13 @@ def main():
         result.append("ip routing")
         result.append("")
 
+    default_gateway = get_default_gateway(config_lines)
+    if default_gateway:
+        result.append(f"ip default-gateway {default_gateway}")
+        result.append("")
+
     for config in config_lines:
         if config.is_default_gateway:
-            result.append(f"ip default-gateway {config.ip_address}")
-            result.append("")
             continue
         commands = get_vlan_creation_commands(config)
         if config.ports:

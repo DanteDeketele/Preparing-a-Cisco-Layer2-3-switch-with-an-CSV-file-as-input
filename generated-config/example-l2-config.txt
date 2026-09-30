@@ -5,6 +5,8 @@ vtp mode transparent
 
 ip routing
 
+ip default-gateway 172.19.67.1
+
 vlan 1982
 name CD-WIFI
 interface vlan 1982

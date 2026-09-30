@@ -76,6 +76,9 @@ to the device that should receive the management SVI.
 99;Management;192.168.99.2;255.255.255.0;1;
 ```
 
+The converter derives the default gateway from the management subnet. For this
+example it generates `ip default-gateway 192.168.99.1`.
+
 ### Default gateway
 
 Provide an IP address without a netmask, switch, or port. This emits an
@@ -205,6 +208,18 @@ Use `--dry-run` first. After sending, the script checks:
 - `show vlan brief` for all configurations
 - `show ip route` when `ip routing` was generated
 - `show interfaces trunk` when a trunk was generated
+
+## TFTP backup
+
+The assignment's final TFTP step is performed after the configuration is sent.
+Start the TFTP server, then run this Cisco IOS command on the configured switch
+and follow its prompts:
+
+```text
+copy running-config tftp:
+```
+
+Enter the TFTP server address and a destination filename when requested.
 
 ## Input validation
 
