@@ -204,3 +204,16 @@ Use `--dry-run` first. After sending, the script checks:
 - `show vlan brief` for all configurations
 - `show ip route` when `ip routing` was generated
 - `show interfaces trunk` when a trunk was generated
+
+## Input validation
+
+The converter stops before writing output when it finds invalid input. Errors
+include the CSV row number and the reason. It rejects missing or extra columns,
+missing descriptions, invalid IPv4 addresses, incomplete IP/netmask pairs,
+invalid VLAN IDs, VLAN IDs outside `1-4094`, malformed port lists, and malformed
+switch assignments. This prevents a partially generated configuration from
+being sent.
+
+The SSH script also rejects ports outside `1-65535`, missing switch hosts, and
+invalid per-switch environment values. Run with `--dry-run` first to review
+the generated commands without opening an SSH connection.

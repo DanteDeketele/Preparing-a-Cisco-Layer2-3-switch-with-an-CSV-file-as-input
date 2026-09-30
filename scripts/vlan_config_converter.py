@@ -1,6 +1,7 @@
 import argparse
 import csv
 import ipaddress
+import sys
 from pathlib import Path
 
 COMMAND_SWITCHPORT_MODE_ACCESS = "switchport mode access"
@@ -13,6 +14,9 @@ COMMAND_INTERFACE_VLAN = "interface vlan"
 COMMAND_IP_ADDRESS = "ip address"
 COMMAND_NO_IP_ADDRESS = "no ip address"
 EXTENDED_VLAN_MIN = 1006
+VLAN_MIN = 1
+VLAN_MAX = 4094
+REQUIRED_COLUMNS = {"Vlan", "Description", "IP Address", "Netmask", "Switch", "Ports"}
 
 def get_parameters():
     parser = argparse.ArgumentParser(description="Convert a Cisco VLAN CSV file to configuration text.")
@@ -26,12 +30,12 @@ def get_parameters():
 class ConfigLine:
 
     def __init__(self, vlan_id, vlan_name, ip_address, subnet_mask, switch, ports, porttype):
-        self.vlan_id = vlan_id.strip()
-        self.vlan_name = vlan_name.strip()
-        self.ip_address = ip_address.strip()
-        self.subnet_mask = subnet_mask.strip()
-        self.switch = switch.strip()
-        self.ports = ports.strip()
+        self.vlan_id = (vlan_id or "").strip()
+        self.vlan_name = (vlan_name or "").strip()
+        self.ip_address = (ip_address or "").strip()
+        self.subnet_mask = (subnet_mask or "").strip()
+        self.switch = (switch or "").strip()
+        self.ports = (ports or "").strip()
         self.porttype = porttype
         self.port_ranges = []
         self.port_list = []
@@ -62,14 +66,25 @@ class ConfigLine:
         if not self.is_default_gateway and not self.vlan_list:
             return False, f"Invalid VLAN ID: {self.vlan_id}"
 
+        if not self.is_default_gateway and any(
+            vlan_id < VLAN_MIN or vlan_id > VLAN_MAX for vlan_id in self.vlan_list
+        ):
+            return False, f"VLAN IDs must be between {VLAN_MIN} and {VLAN_MAX}"
+
+        if not self.is_default_gateway and not self.vlan_name:
+            return False, "Description cannot be empty"
+
         if self.is_trunk and (self.ip_address or self.subnet_mask):
             return False, "Trunk rows cannot contain an IP address or subnet mask"
 
+        if not self.is_default_gateway and bool(self.ip_address) != bool(self.subnet_mask):
+            return False, "IP address and subnet mask must be provided together"
+
         if self.ip_address:
             try:
-                ipaddress.ip_address(self.ip_address)
+                ipaddress.IPv4Address(self.ip_address)
             except ValueError:
-                return False, f"Invalid IP address: {self.ip_address}"
+                return False, f"Invalid IPv4 address: {self.ip_address}"
 
         if self.subnet_mask:
             if self.ip_address == "":
@@ -101,7 +116,7 @@ class ConfigLine:
                 if len(port_range) != 2 or not all(p.isalnum() for p in port_range):
                     return False, f"Invalid port range: {port.strip()}"
                 else:
-                    self.port_ranges.append(port)
+                    self.port_ranges.append(port.strip())
 
             elif not port.strip().isalnum():
                 return False, f"Invalid port name: {port.strip()}"
@@ -217,6 +232,7 @@ def main():
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     config_lines = []
+    validation_errors = []
     result = []
 
     result.append("! VLAN Configuration Commands")
@@ -226,13 +242,22 @@ def main():
 
     with input_path.open(newline="", encoding="utf-8-sig") as input_file:
         rows = csv.DictReader(input_file, delimiter=";")
-        required_columns = {"Vlan", "Description", "IP Address", "Netmask", "Switch", "Ports"}
-        if not rows.fieldnames or not required_columns.issubset(rows.fieldnames):
-            missing = ", ".join(sorted(required_columns - set(rows.fieldnames or [])))
+        if not rows.fieldnames or not REQUIRED_COLUMNS.issubset(rows.fieldnames):
+            missing = ", ".join(sorted(REQUIRED_COLUMNS - set(rows.fieldnames or [])))
             raise SystemExit(f"Error: CSV is missing these columns: {missing}")
 
         for row_number, row in enumerate(rows, start=2):
-            row_switch = row["Switch"].strip()
+            if None in row:
+                validation_errors.append(
+                    f"CSV row {row_number}: too many fields; expected {len(REQUIRED_COLUMNS)} columns"
+                )
+                continue
+            if any(row.get(column) is None for column in REQUIRED_COLUMNS):
+                validation_errors.append(
+                    f"CSV row {row_number}: missing a field; expected {len(REQUIRED_COLUMNS)} columns"
+                )
+                continue
+            row_switch = (row.get("Switch") or "").strip()
             if arguments.switch_id and row_switch and arguments.switch_id not in {
                 switch_id.strip() for switch_id in row_switch.split(",")
             }:
@@ -242,9 +267,18 @@ def main():
                 row["Netmask"], row["Switch"], row["Ports"], arguments.porttype
             )
             if not config_line.valid:
-                print(f"Error on CSV row {row_number}: {config_line.validation_message}")
+                validation_errors.append(
+                    f"CSV row {row_number}: {config_line.validation_message}"
+                )
                 continue
             config_lines.append(config_line)
+
+    if validation_errors:
+        details = "\n".join(f"- {error}" for error in validation_errors)
+        raise SystemExit(f"CSV validation failed:\n{details}")
+
+    if not config_lines:
+        raise SystemExit("Input CSV contains no valid rows for the selected switch")
 
 
     if has_extended_vlan(config_lines):

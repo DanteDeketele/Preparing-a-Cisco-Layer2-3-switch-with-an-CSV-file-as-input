@@ -26,6 +26,7 @@ COLOR_GREEN = "\033[92m"
 COLOR_BOLD = "\033[1m"
 COLOR_RESET = "\033[0m"
 COMMAND_TIMEOUT = 10
+CSV_COLUMNS = {"Vlan", "Description", "IP Address", "Netmask", "Switch", "Ports"}
 
 
 # -----------------------------------------------------------------------------
@@ -39,7 +40,7 @@ def parse_arguments():
     parser.add_argument("-f", "--file", required=True, help="Input CSV file")
     parser.add_argument("--host", help="Switch management IP or hostname")
     parser.add_argument("-u", "--username", help="SSH username")
-    parser.add_argument("--port", type=int, default=22, help="SSH port (default: 22)")
+    parser.add_argument("--port", type=parse_port, default=22, help="SSH port (default: 22)")
     parser.add_argument("-pt", "--porttype", default="Fa0", help="Interface prefix")
     parser.add_argument("-hn", "--hostname", default="Switch", help="Cisco hostname")
     parser.add_argument("--switch-id", help="Only configure this switch from the CSV")
@@ -63,6 +64,16 @@ def parse_arguments():
     return parser.parse_args()
 
 
+def parse_port(value):
+    try:
+        port = int(value)
+    except (TypeError, ValueError) as error:
+        raise argparse.ArgumentTypeError("SSH port must be a number") from error
+    if not 1 <= port <= 65535:
+        raise argparse.ArgumentTypeError("SSH port must be between 1 and 65535")
+    return port
+
+
 def load_dotenv():
     env_path = SCRIPT_DIR.parent / ".env"
     if not env_path.is_file():
@@ -79,7 +90,19 @@ def load_dotenv():
 def get_csv_switch_ids(input_path):
     switch_ids = set()
     with input_path.open(newline="", encoding="utf-8-sig") as input_file:
-        for row in csv.DictReader(input_file, delimiter=";"):
+        rows = csv.DictReader(input_file, delimiter=";")
+        if not rows.fieldnames or not CSV_COLUMNS.issubset(rows.fieldnames):
+            missing = ", ".join(sorted(CSV_COLUMNS - set(rows.fieldnames or [])))
+            raise SystemExit(f"CSV is missing these columns: {missing}")
+        for row_number, row in enumerate(rows, start=2):
+            if None in row:
+                raise SystemExit(
+                    f"CSV row {row_number} has too many fields; expected {len(CSV_COLUMNS)} columns"
+                )
+            if any(row.get(column) is None for column in CSV_COLUMNS):
+                raise SystemExit(
+                    f"CSV row {row_number} is missing a field; expected {len(CSV_COLUMNS)} columns"
+                )
             for switch_id in row.get("Switch", "").split(","):
                 if switch_id.strip():
                     switch_ids.add(switch_id.strip())
@@ -114,7 +137,7 @@ def get_connection_targets(arguments, input_path):
             "host": host,
             "username": os.getenv(f"{prefix}USERNAME", arguments.username or "cisco"),
             "password": os.getenv(f"{prefix}PASSWORD", arguments.password),
-            "port": int(os.getenv(f"{prefix}PORT", arguments.port)),
+            "port": parse_port(os.getenv(f"{prefix}PORT", arguments.port)),
             "hostname": os.getenv(f"{prefix}HOSTNAME", arguments.hostname),
         })
     return targets
@@ -473,8 +496,12 @@ def main():
     if arguments.host and not arguments.username:
         raise SystemExit("--username is required when --host is provided")
 
-    for target in get_connection_targets(arguments, input_path):
-        configure_target(arguments, input_path, target)
+    try:
+        targets = get_connection_targets(arguments, input_path)
+        for target in targets:
+            configure_target(arguments, input_path, target)
+    except (OSError, RuntimeError, ValueError) as error:
+        raise SystemExit(f"Error: {error}") from error
 
 
 if __name__ == "__main__":
