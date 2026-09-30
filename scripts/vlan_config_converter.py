@@ -48,7 +48,10 @@ class ConfigLine:
             self.ip_address and self.subnet_mask and not self.switch and not self.ports
         )
         self.is_default_gateway = bool(
-            self.ip_address and not self.subnet_mask and not self.switch and not self.ports
+            self.ip_address
+            and not self.vlan_id
+            and not self.subnet_mask
+            and not self.ports
         )
 
         self.valid, self.validation_message = self.check_validity()

@@ -7,4 +7,5 @@ Vlan;Description;IP Address;Netmask;Switch;Ports
 1978;CD-Lockers;;;2;36
 1966;CD-HVAC;172.19.66.1;255.255.255.0;1;37-38
 1966;CD-HVAC;;;2;37-38
-1971-1972;Trunk;;;;23
+1971-1972;Trunk-on-Switch-1;;;1;23
+1971-1972;Trunk-on-Switch-2;;;2;23

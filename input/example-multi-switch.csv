@@ -1,0 +1,9 @@
+Vlan;Description;IP Address;Netmask;Switch;Ports
+10;Users-on-Switch-1;;;1;1-12
+20;Users-on-Switch-2;;;2;1-12
+30;Servers-on-Switch-1;;;1;13-16
+40;Servers-on-Switch-2;;;2;13-16
+99;Management-on-Switch-1;192.168.99.2;255.255.255.0;1;
+99;Management-on-Switch-2;192.168.99.3;255.255.255.0;2;
+10-40;Trunk-on-Switch-1;;;1;23
+10-40;Trunk-on-Switch-2;;;2;23
