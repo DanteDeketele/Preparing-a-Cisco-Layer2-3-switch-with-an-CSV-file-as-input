@@ -1,0 +1,48 @@
+! VLAN Configuration Commands
+hostname Switch
+
+ip routing
+
+vlan 20
+name Users-on-Switch-2
+interface vlan 20
+no ip address
+no shutdown
+exit
+
+interface range Fa0/1 - 12
+	switchport access vlan 20
+	switchport mode access
+	spanning-tree portfast
+	no shutdown
+	exit
+
+vlan 40
+name Servers-on-Switch-2
+interface vlan 40
+no ip address
+no shutdown
+exit
+
+interface range Fa0/13 - 16
+	switchport access vlan 40
+	switchport mode access
+	spanning-tree portfast
+	no shutdown
+	exit
+
+vlan 99
+name Management-on-Switch-2
+interface vlan 99
+ip address 192.168.99.3 255.255.255.0
+no shutdown
+exit
+
+
+interface Fa0/23
+	description Trunk-on-Switch-2
+	switchport mode trunk
+	switchport trunk allowed vlan 10-40
+	no shutdown
+	exit
+

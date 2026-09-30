@@ -1,0 +1,54 @@
+! VLAN Configuration Commands
+hostname Switch
+
+ip routing
+
+vlan 10
+name Users
+interface vlan 10
+ip address 192.168.10.1 255.255.255.0
+no shutdown
+exit
+
+interface range Fa0/1 - 12
+	switchport access vlan 10
+	switchport mode access
+	spanning-tree portfast
+	no shutdown
+	exit
+
+vlan 20
+name Servers
+interface vlan 20
+ip address 192.168.20.1 255.255.255.0
+no shutdown
+exit
+
+interface range Fa0/13 - 16
+	switchport access vlan 20
+	switchport mode access
+	spanning-tree portfast
+	no shutdown
+	exit
+
+vlan 30
+name Printers
+interface vlan 30
+ip address 192.168.30.1 255.255.255.0
+no shutdown
+exit
+
+interface range Fa0/17 - 20
+	switchport access vlan 30
+	switchport mode access
+	spanning-tree portfast
+	no shutdown
+	exit
+
+vlan 99
+name Management
+interface vlan 99
+ip address 192.168.99.2 255.255.255.0
+no shutdown
+exit
+

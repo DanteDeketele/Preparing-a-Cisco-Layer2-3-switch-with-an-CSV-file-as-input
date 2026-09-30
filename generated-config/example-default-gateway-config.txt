@@ -1,0 +1,19 @@
+! VLAN Configuration Commands
+hostname Switch
+
+ip default-gateway 192.168.99.1
+
+vlan 10
+name Users
+interface vlan 10
+no ip address
+no shutdown
+exit
+
+interface range Fa0/1 - 12
+	switchport access vlan 10
+	switchport mode access
+	spanning-tree portfast
+	no shutdown
+	exit
+

@@ -18,7 +18,7 @@ from netmiko import ConnectHandler
 # -----------------------------------------------------------------------------
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-CONVERTER = SCRIPT_DIR / "vlan_config_converter.py"
+CONVERTER = SCRIPT_DIR / "convert_csv_to_cisco_config.py"
 
 COLOR_RED = "\033[91m"
 COLOR_YELLOW = "\033[93m"

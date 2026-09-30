@@ -10,7 +10,8 @@ multiple switches.
 pip install netmiko
 ```
 
-`vlan_config_converter.py` only generates configuration text. `send_config.py`
+`convert_csv_to_cisco_config.py` only generates configuration text.
+`configure_cisco_switches.py`
 uses Netmiko to connect over SSH, send the commands, and verify the result.
 
 ## CSV format
@@ -119,27 +120,27 @@ behavior, use explicit switch IDs as shown below.
 
 ## Example files
 
-- [example-L2.csv](input/example-L2.csv): access VLANs and a management SVI
-- [example-L3.csv](input/example-L3.csv): several routed VLANs and management
-- [example-trunk.csv](input/example-trunk.csv): VLAN range and VLAN list trunks
-- [example-multi-switch.csv](input/example-multi-switch.csv): switch-specific and shared rows
-- [example-default-gateway.csv](input/example-default-gateway.csv): default gateway row
-- [BST-C-Core-2.csv](input/BST-C-Core-2.csv): combined two-switch lab example
+- [example-L2.csv](examples/example-L2.csv): access VLANs and a management SVI
+- [example-L3.csv](examples/example-L3.csv): several routed VLANs and management
+- [example-trunk.csv](examples/example-trunk.csv): VLAN range and VLAN list trunks
+- [example-multi-switch.csv](examples/example-multi-switch.csv): switch-specific and shared rows
+- [example-default-gateway.csv](examples/example-default-gateway.csv): default gateway row
+- [BST-C-Core-2.csv](examples/BST-C-Core-2.csv): combined two-switch lab example
 
 ## Generate configuration only
 
 ```powershell
-python .\scripts\vlan_config_converter.py `
-	-f .\input\example-L3.csv `
-	-o .\output\example-L3.txt
+python .\scripts\convert_csv_to_cisco_config.py `
+	-f .\examples\example-L3.csv `
+	-o .\generated-config\example-L3.txt
 ```
 
 Generate configuration for one switch from a multi-switch CSV:
 
 ```powershell
-python .\scripts\vlan_config_converter.py `
-	-f .\input\example-multi-switch.csv `
-	-o .\output\switch-1.txt `
+python .\scripts\convert_csv_to_cisco_config.py `
+	-f .\examples\example-multi-switch.csv `
+	-o .\generated-config\switch-1.txt `
 	--switch-id 1
 ```
 
@@ -149,8 +150,8 @@ default `Fa0` prefix.
 ## Configure one switch over SSH
 
 ```powershell
-python .\scripts\send_config.py `
-	-f .\input\example-L2.csv `
+python .\scripts\configure_cisco_switches.py `
+	-f .\examples\example-L2.csv `
 	--host 192.168.99.10 `
 	-u cisco `
 	--dry-run
@@ -182,14 +183,14 @@ SWITCH_2_HOSTNAME=Core-2
 Run every switch found in the CSV:
 
 ```powershell
-python .\scripts\send_config.py -f .\input\example-multi-switch.csv -y
+python .\scripts\configure_cisco_switches.py -f .\examples\example-multi-switch.csv -y
 ```
 
 Run only switch 2:
 
 ```powershell
-python .\scripts\send_config.py `
-	-f .\input\example-multi-switch.csv `
+python .\scripts\configure_cisco_switches.py `
+	-f .\examples\example-multi-switch.csv `
 	--switch-id 2 `
 	-y
 ```

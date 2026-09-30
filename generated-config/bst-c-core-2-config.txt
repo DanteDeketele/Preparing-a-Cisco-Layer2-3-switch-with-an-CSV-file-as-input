@@ -3,6 +3,8 @@ hostname Switch
 
 vtp mode transparent
 
+ip routing
+
 vlan 1982
 name CD-WIFI
 interface vlan 1982
@@ -115,59 +117,19 @@ interface range Fa0/37 - 38
 	no shutdown
 	exit
 
-vlan 1968
-name CD-Printers
-interface vlan 1968
-ip address 172.19.68.1 255.255.255.0
-no shutdown
-exit
 
-interface range Fa0/39 - 40
-	switchport access vlan 1968
-	switchport mode access
-	spanning-tree portfast
+interface Fa0/23
+	description Trunk-on-Switch-1
+	switchport mode trunk
+	switchport trunk allowed vlan 1971-1972
 	no shutdown
 	exit
 
-vlan 1968
-name CD-Printers
-interface vlan 1968
-no ip address
-no shutdown
-exit
 
-interface range Fa0/39 - 40
-	switchport access vlan 1968
-	switchport mode access
-	spanning-tree portfast
-	no shutdown
-	exit
-
-vlan 1971
-name CD-Clients-C0-1
-interface vlan 1971
-ip address 172.19.71.1 255.255.255.0
-no shutdown
-exit
-
-interface range Fa0/41 - 48
-	switchport access vlan 1971
-	switchport mode access
-	spanning-tree portfast
-	no shutdown
-	exit
-
-vlan 1972
-name CD-Clients-C2-3
-interface vlan 1972
-ip address 172.19.72.1 255.255.255.0
-no shutdown
-exit
-
-interface range Fa0/41 - 48
-	switchport access vlan 1972
-	switchport mode access
-	spanning-tree portfast
+interface Fa0/23
+	description Trunk-on-Switch-2
+	switchport mode trunk
+	switchport trunk allowed vlan 1971-1972
 	no shutdown
 	exit
 

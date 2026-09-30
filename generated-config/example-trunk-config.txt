@@ -1,0 +1,33 @@
+! VLAN Configuration Commands
+hostname Switch
+
+
+interface Fa0/24
+	description Uplink-to-Core
+	switchport mode trunk
+	switchport trunk allowed vlan 10-30
+	no shutdown
+	exit
+
+
+interface Fa0/23
+	description Server-Trunk
+	switchport mode trunk
+	switchport trunk allowed vlan 10,20,30
+	no shutdown
+	exit
+
+vlan 40
+name Access-VLAN
+interface vlan 40
+no ip address
+no shutdown
+exit
+
+interface range Fa0/1 - 12
+	switchport access vlan 40
+	switchport mode access
+	spanning-tree portfast
+	no shutdown
+	exit
+
