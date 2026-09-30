@@ -2,6 +2,7 @@ import argparse
 import csv
 import getpass
 import ipaddress
+import os
 import re
 import subprocess
 import sys
@@ -36,11 +37,12 @@ def parse_arguments():
         description="Convert a CSV file and send the configuration to a Cisco switch."
     )
     parser.add_argument("-f", "--file", required=True, help="Input CSV file")
-    parser.add_argument("--host", required=True, help="Switch management IP or hostname")
-    parser.add_argument("-u", "--username", required=True, help="SSH username")
+    parser.add_argument("--host", help="Switch management IP or hostname")
+    parser.add_argument("-u", "--username", help="SSH username")
     parser.add_argument("--port", type=int, default=22, help="SSH port (default: 22)")
     parser.add_argument("-pt", "--porttype", default="Fa0", help="Interface prefix")
     parser.add_argument("-hn", "--hostname", default="Switch", help="Cisco hostname")
+    parser.add_argument("--switch-id", help="Only configure this switch from the CSV")
     parser.add_argument(
         "-pw",
         "--pw",
@@ -59,6 +61,63 @@ def parse_arguments():
         help="Convert and display commands without connecting or sending them",
     )
     return parser.parse_args()
+
+
+def load_dotenv():
+    env_path = SCRIPT_DIR.parent / ".env"
+    if not env_path.is_file():
+        return
+    for line in env_path.read_text(encoding="utf-8-sig").splitlines():
+        line = line.strip()
+        if not line or line.startswith("#") or "=" not in line:
+            continue
+        key, value = line.split("=", 1)
+        value = value.strip().strip('"').strip("'")
+        os.environ.setdefault(key.strip(), value)
+
+
+def get_csv_switch_ids(input_path):
+    switch_ids = set()
+    with input_path.open(newline="", encoding="utf-8-sig") as input_file:
+        for row in csv.DictReader(input_file, delimiter=";"):
+            for switch_id in row.get("Switch", "").split(","):
+                if switch_id.strip():
+                    switch_ids.add(switch_id.strip())
+    return sorted(switch_ids)
+
+
+def get_connection_targets(arguments, input_path):
+    if arguments.host:
+        return [{
+            "switch_id": arguments.switch_id,
+            "host": arguments.host,
+            "username": arguments.username,
+            "password": arguments.password,
+            "port": arguments.port,
+            "hostname": arguments.hostname,
+        }]
+
+    switch_ids = [arguments.switch_id] if arguments.switch_id else get_csv_switch_ids(input_path)
+    if not switch_ids:
+        raise SystemExit(
+            "No switch IDs found. Provide --host or add Switch values to the CSV."
+        )
+
+    targets = []
+    for switch_id in switch_ids:
+        prefix = f"SWITCH_{switch_id}_"
+        host = os.getenv(f"{prefix}HOST")
+        if not host:
+            raise SystemExit(f"Missing {prefix}HOST in the environment or .env")
+        targets.append({
+            "switch_id": switch_id,
+            "host": host,
+            "username": os.getenv(f"{prefix}USERNAME", arguments.username or "cisco"),
+            "password": os.getenv(f"{prefix}PASSWORD", arguments.password),
+            "port": int(os.getenv(f"{prefix}PORT", arguments.port)),
+            "hostname": os.getenv(f"{prefix}HOSTNAME", arguments.hostname),
+        })
+    return targets
 
 
 # -----------------------------------------------------------------------------
@@ -127,7 +186,7 @@ def find_warnings(input_path, host):
 # Configuration conversion and temporary-file handling
 # -----------------------------------------------------------------------------
 
-def convert_csv_to_config(input_path, porttype, hostname):
+def convert_csv_to_config(input_path, porttype, hostname, switch_id=None):
     temporary_file = tempfile.NamedTemporaryFile(
         prefix="switch-config-", suffix=".txt", delete=False
     )
@@ -149,6 +208,8 @@ def convert_csv_to_config(input_path, porttype, hostname):
         "--hostname",
         hostname,
     ]
+    if switch_id:
+        command.extend(["--switch-id", switch_id])
     result = subprocess.run(command, capture_output=True, text=True)
     if result.returncode != 0:
         output_path.unlink(missing_ok=True)
@@ -235,7 +296,12 @@ def clear_progress():
 # -----------------------------------------------------------------------------
 
 def get_verification_commands(commands):
-    return ["show vlan brief"]
+    verification_commands = ["show vlan brief"]
+    if any(command == "ip routing" for command in commands):
+        verification_commands.append("show ip route")
+    if any("switchport mode trunk" in command for command in commands):
+        verification_commands.append("show interfaces trunk")
+    return verification_commands
 
 
 def verify_configuration(net_connect, commands):
@@ -301,44 +367,43 @@ def send_configuration(net_connect, commands, hostname_change):
 # Main workflow
 # -----------------------------------------------------------------------------
 
-def main():
-    arguments = parse_arguments()
-    input_path = Path(arguments.file)
-    if not input_path.is_file():
-        raise SystemExit(f"Input CSV file not found: {input_path}")
-    if not CONVERTER.is_file():
-        raise SystemExit(f"Converter not found: {CONVERTER}")
-
-    warnings = find_warnings(input_path, arguments.host)
+def configure_target(arguments, input_path, target):
+    switch_id = target["switch_id"]
     commands, temporary_config_path = convert_csv_to_config(
-        input_path, arguments.porttype, arguments.hostname
+        input_path, arguments.porttype, target["hostname"], switch_id
     )
     commands = [command for command in commands if not command.startswith("hostname ")]
-    print(f"[ok] Converted CSV into {len(commands)} configuration commands.")
-    print(f"[ok] Configuration stored in temporary file: {temporary_config_path}")
+    label = f"switch {switch_id}: " if switch_id else ""
+    print(f"[ok] {label}converted CSV into {len(commands)} configuration commands.")
+    print(f"[ok] {label}configuration stored in temporary file: {temporary_config_path}")
+    warnings = find_warnings(input_path, target["host"])
     if arguments.dry_run:
         print_warnings(warnings, commands)
-        print("Dry run complete. Nothing was sent.")
+        target_name = label.rstrip(": ") or "switch"
+        print(f"Dry run complete for {target_name}. Nothing was sent.")
         return
 
     if not arguments.yes and not confirm_send(warnings, commands):
-        print("Cancelled. No SSH connection was opened and nothing was sent.")
+        target_name = label.rstrip(": ") or "switch"
+        print(f"Cancelled for {target_name}. No configuration was sent.")
         return
 
-    password = arguments.password or getpass.getpass("SSH password: ")
+    password = target["password"] or getpass.getpass(
+        f"SSH password for {label.rstrip(':') or target['host']}: "
+    )
     connection = {
         "device_type": "cisco_ios",
-        "host": arguments.host,
-        "username": arguments.username,
+        "host": target["host"],
+        "username": target["username"],
         "password": password,
-        "port": arguments.port,
+        "port": target["port"],
         "keepalive": 30,
         "fast_cli": False,
         "global_delay_factor": 1,
         "read_timeout_override": COMMAND_TIMEOUT,
     }
 
-    print(f"Connecting to {arguments.host}:{arguments.port}...")
+    print(f"Connecting to {target['host']}:{target['port']} ({label.rstrip(':') or 'switch'})...")
     with ConnectHandler(**connection) as net_connect:
         prompt = net_connect.find_prompt()
         actual_hostname = get_hostname(prompt)
@@ -353,16 +418,16 @@ def main():
             return
 
         hostname_change = False
-        if actual_hostname.lower() != arguments.hostname.lower():
+        if actual_hostname.lower() != target["hostname"].lower():
             print(
                 "WARNING: The connected hostname differs from the requested hostname: "
-                f"'{actual_hostname}' versus '{arguments.hostname}'."
+                f"'{actual_hostname}' versus '{target['hostname']}'."
             )
             hostname_change = arguments.yes or input(
-                f"Change the hostname to '{arguments.hostname}'? [y/N]: "
+                f"Change the hostname to '{target['hostname']}'? [y/N]: "
             ).strip().lower() in {"yes", "y"}
             if hostname_change:
-                commands.insert(0, f"hostname {arguments.hostname}")
+                commands.insert(0, f"hostname {target['hostname']}")
             else:
                 print("Hostname unchanged. Continuing with the VLAN configuration.")
 
@@ -395,6 +460,21 @@ def main():
             print("Configuration stopped. Review the switch response before disconnecting.")
         else:
             print(f"{COLOR_GREEN}{COLOR_BOLD}FINISHED{COLOR_RESET}")
+
+
+def main():
+    arguments = parse_arguments()
+    load_dotenv()
+    input_path = Path(arguments.file)
+    if not input_path.is_file():
+        raise SystemExit(f"Input CSV file not found: {input_path}")
+    if not CONVERTER.is_file():
+        raise SystemExit(f"Converter not found: {CONVERTER}")
+    if arguments.host and not arguments.username:
+        raise SystemExit("--username is required when --host is provided")
+
+    for target in get_connection_targets(arguments, input_path):
+        configure_target(arguments, input_path, target)
 
 
 if __name__ == "__main__":

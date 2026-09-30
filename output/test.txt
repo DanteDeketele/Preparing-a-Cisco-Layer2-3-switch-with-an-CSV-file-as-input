@@ -1,0 +1,173 @@
+! VLAN Configuration Commands
+hostname Switch
+
+vtp mode transparent
+
+vlan 1982
+name CD-WIFI
+interface vlan 1982
+ip address 172.19.82.1 255.255.255.0
+no shutdown
+exit
+
+interface range Fa0/1 - 28
+	switchport access vlan 1982
+	switchport mode access
+	spanning-tree portfast
+	no shutdown
+	exit
+
+vlan 1982
+name CD-WIFI
+interface vlan 1982
+no ip address
+no shutdown
+exit
+
+interface range Fa0/1 - 28
+	switchport access vlan 1982
+	switchport mode access
+	spanning-tree portfast
+	no shutdown
+	exit
+
+vlan 1969
+name CD-IP-Cam
+interface vlan 1969
+ip address 172.19.69.1 255.255.255.0
+no shutdown
+exit
+
+interface range Fa0/29 - 35
+	switchport access vlan 1969
+	switchport mode access
+	spanning-tree portfast
+	no shutdown
+	exit
+
+vlan 1969
+name CD-IP-Cam
+interface vlan 1969
+no ip address
+no shutdown
+exit
+
+interface range Fa0/29 - 35
+	switchport access vlan 1969
+	switchport mode access
+	spanning-tree portfast
+	no shutdown
+	exit
+
+vlan 1978
+name CD-Lockers
+interface vlan 1978
+ip address 172.19.78.1 255.255.255.0
+no shutdown
+exit
+
+interface Fa0/36
+	switchport access vlan 1978
+	switchport mode access
+	spanning-tree portfast
+	no shutdown
+	exit
+
+vlan 1978
+name CD-Lockers
+interface vlan 1978
+no ip address
+no shutdown
+exit
+
+interface Fa0/36
+	switchport access vlan 1978
+	switchport mode access
+	spanning-tree portfast
+	no shutdown
+	exit
+
+vlan 1966
+name CD-HVAC
+interface vlan 1966
+ip address 172.19.66.1 255.255.255.0
+no shutdown
+exit
+
+interface range Fa0/37 - 38
+	switchport access vlan 1966
+	switchport mode access
+	spanning-tree portfast
+	no shutdown
+	exit
+
+vlan 1966
+name CD-HVAC
+interface vlan 1966
+no ip address
+no shutdown
+exit
+
+interface range Fa0/37 - 38
+	switchport access vlan 1966
+	switchport mode access
+	spanning-tree portfast
+	no shutdown
+	exit
+
+vlan 1968
+name CD-Printers
+interface vlan 1968
+ip address 172.19.68.1 255.255.255.0
+no shutdown
+exit
+
+interface range Fa0/39 - 40
+	switchport access vlan 1968
+	switchport mode access
+	spanning-tree portfast
+	no shutdown
+	exit
+
+vlan 1968
+name CD-Printers
+interface vlan 1968
+no ip address
+no shutdown
+exit
+
+interface range Fa0/39 - 40
+	switchport access vlan 1968
+	switchport mode access
+	spanning-tree portfast
+	no shutdown
+	exit
+
+vlan 1971
+name CD-Clients-C0-1
+interface vlan 1971
+ip address 172.19.71.1 255.255.255.0
+no shutdown
+exit
+
+interface range Fa0/41 - 48
+	switchport access vlan 1971
+	switchport mode access
+	spanning-tree portfast
+	no shutdown
+	exit
+
+vlan 1972
+name CD-Clients-C2-3
+interface vlan 1972
+ip address 172.19.72.1 255.255.255.0
+no shutdown
+exit
+
+interface range Fa0/41 - 48
+	switchport access vlan 1972
+	switchport mode access
+	spanning-tree portfast
+	no shutdown
+	exit
+

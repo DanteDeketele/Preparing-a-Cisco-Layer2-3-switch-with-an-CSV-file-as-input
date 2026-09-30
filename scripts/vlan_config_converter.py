@@ -5,6 +5,8 @@ from pathlib import Path
 
 COMMAND_SWITCHPORT_MODE_ACCESS = "switchport mode access"
 COMMAND_SWITCHPORT_ACCESS_VLAN = "switchport access vlan"
+COMMAND_SWITCHPORT_MODE_TRUNK = "switchport mode trunk"
+COMMAND_SWITCHPORT_TRUNK_ALLOWED_VLAN = "switchport trunk allowed vlan"
 COMMAND_SPANNING_TREE_PORTFAST = "spanning-tree portfast"
 COMMAND_NO_SHUTDOWN = "no shutdown"
 COMMAND_INTERFACE_VLAN = "interface vlan"
@@ -18,6 +20,7 @@ def get_parameters():
     parser.add_argument("-o", "--output", required=True, help="Output text file")
     parser.add_argument("-hn", "--hostname", default="Switch", help="Switch hostname")
     parser.add_argument("-pt", "--porttype", default="Fa0", help="Interface prefix")
+    parser.add_argument("--switch-id", help="Only convert rows assigned to this switch")
     return parser.parse_args()
 
 class ConfigLine:
@@ -32,6 +35,15 @@ class ConfigLine:
         self.porttype = porttype
         self.port_ranges = []
         self.port_list = []
+        self.vlan_list = self.parse_vlan_list()
+        self.is_trunk = bool(
+            self.ports
+            and (len(self.vlan_list) > 1 or any(
+                separator in self.vlan_id for separator in (",", "-")
+            ) or any(
+                keyword in self.vlan_name.lower() for keyword in ("trunk", "uplink")
+            ))
+        )
         self.is_management = bool(
             self.ip_address and self.subnet_mask and not self.switch and not self.ports
         )
@@ -44,8 +56,11 @@ class ConfigLine:
     
 
     def check_validity(self):
-        if not self.vlan_id.isdigit() and not self.is_default_gateway:
+        if not self.is_default_gateway and not self.vlan_list:
             return False, f"Invalid VLAN ID: {self.vlan_id}"
+
+        if self.is_trunk and (self.ip_address or self.subnet_mask):
+            return False, "Trunk rows cannot contain an IP address or subnet mask"
 
         if self.ip_address:
             try:
@@ -61,7 +76,12 @@ class ConfigLine:
             except ValueError:
                 return False, f"Invalid subnet mask: {self.subnet_mask}"
 
-        if not self.switch and not self.is_management and not self.is_default_gateway:
+        if (
+            not self.switch
+            and not self.is_management
+            and not self.is_default_gateway
+            and not self.is_trunk
+        ):
             return False, "Switch name cannot be empty"
 
         if not self.ports:
@@ -89,8 +109,33 @@ class ConfigLine:
         
         return True, "Valid configuration line"
 
+    def parse_vlan_list(self):
+        if not self.vlan_id:
+            return []
+
+        vlan_ids = []
+        for item in self.vlan_id.split(","):
+            item = item.strip()
+            if not item:
+                return []
+            if "-" in item:
+                bounds = item.split("-")
+                if len(bounds) != 2 or not all(bound.isdigit() for bound in bounds):
+                    return []
+                start, end = map(int, bounds)
+                if start > end:
+                    return []
+                vlan_ids.extend(range(start, end + 1))
+            elif item.isdigit():
+                vlan_ids.append(int(item))
+            else:
+                return []
+        return vlan_ids
+
 def get_vlan_creation_commands(config_line):
     commands = []
+    if config_line.is_trunk:
+        return commands
     commands.append(f"vlan {config_line.vlan_id}")
     commands.append(f"name {config_line.vlan_name}")
     if config_line.ip_address and config_line.subnet_mask:
@@ -108,12 +153,39 @@ def get_vlan_creation_commands(config_line):
 def has_extended_vlan(config_lines):
     return any(
         not config_line.is_default_gateway
-        and int(config_line.vlan_id) >= EXTENDED_VLAN_MIN
+        and any(vlan_id >= EXTENDED_VLAN_MIN for vlan_id in config_line.vlan_list)
+        for config_line in config_lines
+    )
+
+def has_layer3_vlans(config_lines):
+    return any(
+        config_line.ip_address and config_line.subnet_mask
         for config_line in config_lines
     )
 
 def get_port_configuration_commands(config_line):
     commands = []
+    vlan_list = config_line.vlan_id.replace(" ", "")
+    if config_line.is_trunk:
+        for port in config_line.port_list:
+            commands.append(f"interface {config_line.porttype}/{port}")
+            commands.append(f"\tdescription {config_line.vlan_name}")
+            commands.append(f"\t{COMMAND_SWITCHPORT_MODE_TRUNK}")
+            commands.append(f"\t{COMMAND_SWITCHPORT_TRUNK_ALLOWED_VLAN} {vlan_list}")
+            commands.append(f"\t{COMMAND_NO_SHUTDOWN}")
+            commands.append(f"\texit")
+        for port_range in config_line.port_ranges:
+            start_port, end_port = port_range.split("-")
+            commands.append(
+                f"interface range {config_line.porttype}/{start_port} - {end_port}"
+            )
+            commands.append(f"\tdescription {config_line.vlan_name}")
+            commands.append(f"\t{COMMAND_SWITCHPORT_MODE_TRUNK}")
+            commands.append(f"\t{COMMAND_SWITCHPORT_TRUNK_ALLOWED_VLAN} {vlan_list}")
+            commands.append(f"\t{COMMAND_NO_SHUTDOWN}")
+            commands.append(f"\texit")
+        return commands
+
     for port in config_line.port_list:
         commands.append(f"interface {config_line.porttype}/{port}")
         commands.append(f"\t{COMMAND_SWITCHPORT_ACCESS_VLAN} {config_line.vlan_id}")
@@ -157,6 +229,11 @@ def main():
             raise SystemExit(f"Error: CSV is missing these columns: {missing}")
 
         for row_number, row in enumerate(rows, start=2):
+            row_switch = row["Switch"].strip()
+            if arguments.switch_id and row_switch and arguments.switch_id not in {
+                switch_id.strip() for switch_id in row_switch.split(",")
+            }:
+                continue
             config_line = ConfigLine(
                 row["Vlan"], row["Description"], row["IP Address"],
                 row["Netmask"], row["Switch"], row["Ports"], arguments.porttype
@@ -169,6 +246,10 @@ def main():
 
     if has_extended_vlan(config_lines):
         result.append("vtp mode transparent")
+        result.append("")
+
+    if has_layer3_vlans(config_lines):
+        result.append("ip routing")
         result.append("")
 
     for config in config_lines:

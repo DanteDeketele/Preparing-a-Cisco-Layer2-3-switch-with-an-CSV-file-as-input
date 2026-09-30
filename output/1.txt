@@ -1,5 +1,5 @@
 ! VLAN Configuration Commands
-hostname DanteSwitch
+hostname Switch
 
 vtp mode transparent
 
@@ -10,7 +10,7 @@ no ip address
 no shutdown
 exit
 
-interface range Gi0/1-12
+interface range Fa0/1 - 12
 	switchport access vlan 1982
 	switchport mode access
 	spanning-tree portfast
@@ -24,7 +24,7 @@ no ip address
 no shutdown
 exit
 
-interface Gi0/13
+interface Fa0/13
 	switchport access vlan 1969
 	switchport mode access
 	spanning-tree portfast
@@ -38,7 +38,7 @@ no ip address
 no shutdown
 exit
 
-interface Gi0/14
+interface Fa0/14
 	switchport access vlan 1970
 	switchport mode access
 	spanning-tree portfast
@@ -52,7 +52,7 @@ no ip address
 no shutdown
 exit
 
-interface range Gi0/15-16
+interface range Fa0/15 - 16
 	switchport access vlan 1978
 	switchport mode access
 	spanning-tree portfast
@@ -66,7 +66,7 @@ no ip address
 no shutdown
 exit
 
-interface range Gi0/17-18
+interface range Fa0/17 - 18
 	switchport access vlan 1968
 	switchport mode access
 	spanning-tree portfast
@@ -80,7 +80,7 @@ no ip address
 no shutdown
 exit
 
-interface range Gi0/19-22
+interface range Fa0/19 - 22
 	switchport access vlan 1973
 	switchport mode access
 	spanning-tree portfast
